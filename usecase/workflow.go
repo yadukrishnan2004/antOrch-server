@@ -9,10 +9,11 @@ import (
 
 // WorkflowService contains all use cases for workflow orchestration.
 type WorkflowService struct {
-	repo    domain.WorkflowRepository
-	queue   domain.TaskQueue
-	timers  domain.TimerRepository
-	signals domain.SignalRepository
+	repo     domain.WorkflowRepository
+	queue    domain.TaskQueue
+	timers   domain.TimerRepository
+	signals  domain.SignalRepository
+	children domain.ChildWorkflowRepository
 }
 
 // NewWorkflowService constructs the service with its required ports.
@@ -21,12 +22,14 @@ func NewWorkflowService(
 	queue domain.TaskQueue,
 	timers domain.TimerRepository,
 	signals domain.SignalRepository,
+	children domain.ChildWorkflowRepository,
 ) *WorkflowService {
 	return &WorkflowService{
-		repo:    repo,
-		queue:   queue,
-		timers:  timers,
-		signals: signals,
+		repo:     repo,
+		queue:    queue,
+		timers:   timers,
+		signals:  signals,
+		children: children,
 	}
 }
 
