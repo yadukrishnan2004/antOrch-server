@@ -10,8 +10,6 @@ import (
 	"time"
 
 	httpapi "github.com/yadukrishnan2004/antOrch-server/api/http"
-	"github.com/yadukrishnan2004/antOrch-server/cluster"
-	cluster_persistence "github.com/yadukrishnan2004/antOrch-server/cluster/infra/persistence"
 	"github.com/yadukrishnan2004/antOrch-server/infrastructure/persistence"
 	ifacequeue "github.com/yadukrishnan2004/antOrch-server/interface/queue"
 	"github.com/yadukrishnan2004/antOrch-server/interface/registry"
@@ -21,26 +19,27 @@ import (
 
 func main() {
 	// ── Config from env (or defaults for local dev) ───────────────
-	nodeID := getEnv("NODE_ID", "node-1")
-	address := getEnv("NODE_ADDR", "localhost:7233")
 	port := getEnv("PORT", "7233")
 
-	fmt.Printf("=== Temporal Server — Phase 4 (Clustering) ===\n")
-	fmt.Printf("Node: %s  Address: %s\n\n", nodeID, address)
+	fmt.Printf("=== Temporal Server — Single Node MVP ===\n")
+	fmt.Printf("Starting on port %s\n\n", port)
 
 	// ── Wire workflow engine layers ───────────────────────────────
 	store := persistence.NewInMemoryStore()
 	timerStore := persistence.NewInMemoryTimerStore()
 	signalStore := persistence.NewInMemorySignalStore()
 	childStore := persistence.NewInMemoryChildStore()
-	memberStore := cluster_persistence.NewInMemoryMembershipStore(cluster.DefaultShardCount)
 	queue := ifacequeue.New(100)
+	
 	reg := registry.New()
+	// Register a dummy activity for testing
+	reg.Register("EchoActivity", func(input interface{}) (interface{}, error) {
+		fmt.Printf(">>> Executing EchoActivity with input: %v\n", input)
+		return fmt.Sprintf("Echo: %v", input), nil
+	})
+
 	svc := usecase.NewWorkflowService(store, queue, timerStore, signalStore, childStore)
 	w := worker.New("w1", queue, reg, svc)
-
-	// ── Wire cluster layer ────────────────────────────────────────
-	coordinator := cluster.New(nodeID, address, memberStore)
 
 	// ── Start background services ─────────────────────────────────
 	go w.Run()
@@ -51,15 +50,8 @@ func main() {
 		}
 	}()
 
-	// ── Join cluster ──────────────────────────────────────────────
-	if err := coordinator.Start(); err != nil {
-		fmt.Printf("[main] failed to start cluster: %v\n", err)
-		os.Exit(1)
-	}
-	defer coordinator.Stop()
-
 	// ── Start HTTP server ─────────────────────────────────────────
-	handler := httpapi.New(svc, coordinator)
+	handler := httpapi.New(svc)
 	server := &http.Server{
 		Addr:    ":" + port,
 		Handler: handler,
@@ -73,10 +65,6 @@ func main() {
 		}
 	}()
 
-	// ── Demo: show cluster status ─────────────────────────────────
-	time.Sleep(500 * time.Millisecond)
-	showClusterStatus(coordinator)
-
 	// ── Graceful shutdown ─────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -86,28 +74,6 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = server.Shutdown(ctx)
-}
-
-func showClusterStatus(c *cluster.Coordinator) {
-	fmt.Println("\n─── Cluster status ──────────────────────────")
-	fmt.Printf("  Node:      %s\n", c.NodeID())
-	fmt.Printf("  Leader:    %v\n", c.IsLeader())
-	fmt.Printf("  Shards:    %d total\n", cluster.DefaultShardCount)
-	fmt.Println("  Shard distribution:")
-	for nodeID, count := range c.Distribution() {
-		fmt.Printf("    %s → %d shards\n", nodeID, count)
-	}
-	fmt.Println("─────────────────────────────────────────────")
-
-	// show where a few sample workflows would land
-	fmt.Println("\n  Sample workflow routing:")
-	samples := []string{"wf-001", "wf-002", "wf-003", "wf-abc", "wf-xyz"}
-	for _, id := range samples {
-		shard := c.ShardFor(id)
-		local := c.IsLocal(id)
-		fmt.Printf("    %s → shard=%d local=%v\n", id, shard, local)
-	}
-	fmt.Println()
 }
 
 func getEnv(key, fallback string) string {
