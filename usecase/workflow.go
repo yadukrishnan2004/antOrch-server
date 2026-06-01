@@ -70,6 +70,9 @@ func (s *WorkflowService) StartWorkflow(id, name string) (*domain.Workflow, erro
 	return wf, nil
 }
 
+
+
+
 // ScheduleActivity enqueues an activity with no retry policy.
 func (s *WorkflowService) ScheduleActivity(workflowID, activityID, activityName string, input interface{}) error {
 	return s.ScheduleActivityWithRetry(workflowID, activityID, activityName, input, domain.NoRetry)

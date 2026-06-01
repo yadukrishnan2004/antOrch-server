@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	port := "7233" // same default port as real Temporal
+	port := "7233" 
 	fmt.Printf("=== Temporal Server starting on :%s ===\n", port)
 
 	// ── Wire all layers ───────────────────────────────────────────
